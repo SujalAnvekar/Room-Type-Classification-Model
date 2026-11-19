@@ -2,8 +2,16 @@ from fastapi import FastAPI
 from pydantic import BaseModel,Field
 import joblib
 import pandas as pd
+from fastapi.middleware.cors import CORSMiddleware
 
 app=FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 columns=["latitude","longitude","price","minimum_nights","number_of_reviews","reviews_per_month",
          "calculated_host_listings_count","neighbourhood_group","neighbourhood","availability_365"]
@@ -34,6 +42,6 @@ def predict(features:Features):
     proba=model.predict_proba(row)
 
     return{
-        "Predicted_room_type":prediction.tolist(),
-        "Probability":proba.tolist()
+        "Predicted_room_type":prediction[0],
+        "Probability":proba.tolist()[0]
     }
