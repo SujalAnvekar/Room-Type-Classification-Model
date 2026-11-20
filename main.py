@@ -37,11 +37,20 @@ def greet():
 
 @app.post('/predict')
 def predict(features:Features):
-    row=pd.DataFrame([features.dict()],columns=columns)
+    row=pd.DataFrame([features.model_dump()],columns=columns)
     prediction=model.predict(row)
-    proba=model.predict_proba(row)
+    proba=model.predict_proba(row)[0]
+
+    probabilities = {
+        str(c): float(p)
+        for c, p in zip(model.classes_, proba)
+    }
 
     return{
-        "Predicted_room_type":prediction[0],
-        "Probability":proba.tolist()[0]
+        "predicted_room_type": str(prediction[0]),
+        "probabilities": {
+            str(class_name): float(probability)
+            for class_name, probability in zip(model.classes_, proba)
+        }
+
     }

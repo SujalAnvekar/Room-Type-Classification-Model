@@ -1,8 +1,16 @@
-// Local development
+// ============================================================
+// API CONFIGURATION
+// ============================================================
+
 const API_BASE_URL = "http://127.0.0.1:8000";
 
 const PREDICT_ENDPOINT = `${API_BASE_URL}/predict`;
 const HEALTH_ENDPOINT = `${API_BASE_URL}/`;
+
+
+// ============================================================
+// DOM ELEMENTS
+// ============================================================
 
 const form = document.getElementById("predictionForm");
 
@@ -16,8 +24,12 @@ const apiIndicator = document.querySelector(".api-indicator");
 
 const availability = document.getElementById("availability");
 
+const resultCard = document.getElementById("resultCard");
 
-// Availability slider
+
+// ============================================================
+// AVAILABILITY SLIDER
+// ============================================================
 
 availability.addEventListener("input", () => {
 
@@ -27,7 +39,9 @@ availability.addEventListener("input", () => {
 });
 
 
-// Check API connection
+// ============================================================
+// API CONNECTION CHECK
+// ============================================================
 
 async function checkApi() {
 
@@ -62,7 +76,9 @@ async function checkApi() {
 checkApi();
 
 
-// Error handling
+// ============================================================
+// ERROR HANDLING
+// ============================================================
 
 function showError(message) {
 
@@ -82,72 +98,68 @@ function clearError() {
 }
 
 
-// Display prediction
+// ============================================================
+// PROBABILITY VALIDATION
+// ============================================================
+
+function formatProbability(value) {
+
+    const number = Number(value);
+
+    if (
+        !Number.isFinite(number) ||
+        number < 0 ||
+        number > 1
+    ) {
+
+        throw new Error(
+            "Invalid probability received from the API."
+        );
+
+    }
+
+    return number * 100;
+
+}
+
+
+// ============================================================
+// DISPLAY PREDICTION
+// ============================================================
 
 function renderResult(data) {
 
-    const predicted = data.Predicted_room_type;
+    const predicted = data.predicted_room_type;
 
-    if (predicted === undefined || predicted === null) {
+    const probabilities = data.probabilities || {};
+
+
+    if (!predicted) {
 
         throw new Error(
-            "The API response does not contain Predicted_room_type."
+            "The API response does not contain predicted_room_type."
         );
 
     }
 
-    let probabilities = data.Class_probabilities;
 
-    if (
-        !probabilities &&
-        Array.isArray(data.Probability) &&
-        Array.isArray(data.classes)
-    ) {
+    // Sort probabilities
 
-        probabilities = Object.fromEntries(
+    const entries = Object.entries(probabilities)
 
-            data.classes.map((name, index) => [
-                name,
-                data.Probability[index]
-            ])
+        .map(([name, value]) => {
 
-        );
+            return [name, Number(value)];
 
-    }
+        })
 
-    let entries = probabilities
-        ? Object.entries(probabilities).map(
-            ([name, value]) => [name, Number(value)]
-        )
-        : [];
+        .sort((a, b) => b[1] - a[1]);
 
-    entries.sort((a, b) => b[1] - a[1]);
 
-    const topProbability = entries.length
-        ? entries[0][1]
-        : null;
-
-    const confidence = topProbability === null
-        ? null
-        : (
-            topProbability <= 1
-                ? topProbability * 100
-                : topProbability
-        );
-
+    // Display predicted room type
 
     document.getElementById("predictedType").textContent =
         String(predicted);
-
-    document.getElementById("confidenceValue").textContent =
-        confidence === null
-            ? "N/A"
-            : `${confidence.toFixed(1)}%`;
-
-    document.getElementById("confidenceBar").style.width =
-        confidence === null
-            ? "0%"
-            : `${Math.max(0, Math.min(100, confidence))}%`;
 
 
     // Probability visualization
@@ -157,13 +169,11 @@ function renderResult(data) {
     list.innerHTML = "";
 
 
-    if (entries.length) {
+    if (entries.length > 0) {
 
         entries.forEach(([label, value]) => {
 
-            const percent = value <= 1
-                ? value * 100
-                : value;
+            const percent = formatProbability(value);
 
             const item = document.createElement("div");
 
@@ -196,7 +206,7 @@ function renderResult(data) {
             const bar = document.createElement("span");
 
             bar.style.width =
-                `${Math.max(0, Math.min(100, percent))}%`;
+                `${Math.min(100, percent)}%`;
 
 
             track.appendChild(bar);
@@ -213,24 +223,42 @@ function renderResult(data) {
 
         const note = document.createElement("p");
 
-        note.className = "intro-copy";
+        note.className = "probability-empty";
 
         note.textContent =
-            "The model returned a prediction, but no class probabilities were provided.";
+            "The model returned a prediction, but no probabilities were provided.";
 
         list.appendChild(note);
 
     }
 
 
-    document.getElementById("emptyState").classList.add("hidden");
+    // Highlight predicted building
+
+    document.querySelectorAll(".building").forEach(building => {
+
+        building.classList.toggle(
+            "active",
+            building.dataset.room === predicted
+        );
+
+    });
+
+
+    // Display result
+
+    resultCard.classList.add("has-result");
+
+    document.getElementById("skylineHint").classList.add("hidden");
 
     document.getElementById("resultContent").classList.remove("hidden");
 
 }
 
 
-// Submit prediction
+// ============================================================
+// SUBMIT PREDICTION
+// ============================================================
 
 form.addEventListener("submit", async (event) => {
 
@@ -258,9 +286,9 @@ form.addEventListener("submit", async (event) => {
             formData.get("number_of_reviews")
         ),
 
-       reviews_per_month: parseFloat(
-    formData.get("reviews_per_month")
-),
+        reviews_per_month: Number(
+            formData.get("reviews_per_month")
+        ),
 
         calculated_host_listings_count: Number(
             formData.get("calculated_host_listings_count")
@@ -281,15 +309,21 @@ form.addEventListener("submit", async (event) => {
     };
 
 
+    // Validate numeric inputs
+
     if (
-        Object.values(payload).some(
-            value =>
-                value === "" ||
-                (
-                    typeof value === "number" &&
-                    !Number.isFinite(value)
-                )
+
+        Object.values(payload).some(value =>
+
+            value === "" ||
+
+            (
+                typeof value === "number" &&
+                !Number.isFinite(value)
+            )
+
         )
+
     ) {
 
         showError("Please complete all fields with valid values.");
@@ -298,6 +332,26 @@ form.addEventListener("submit", async (event) => {
 
     }
 
+
+    // Validate text inputs
+
+    if (
+
+        !payload.neighbourhood ||
+        !payload.neighbourhood_group
+
+    ) {
+
+        showError(
+            "Please select a borough and enter a neighbourhood."
+        );
+
+        return;
+
+    }
+
+
+    // Loading state
 
     submitBtn.disabled = true;
 
@@ -308,6 +362,9 @@ form.addEventListener("submit", async (event) => {
 
 
     try {
+
+
+        // Send actual input to FastAPI
 
         const response = await fetch(PREDICT_ENDPOINT, {
 
@@ -325,32 +382,44 @@ form.addEventListener("submit", async (event) => {
         const data = await response.json().catch(() => ({}));
 
 
+        // API error handling
+
         if (!response.ok) {
 
             const detail = data.detail;
 
             const message = Array.isArray(detail)
 
-                ? detail.map(
-                    item =>
-                        `${item.loc?.slice(-1)[0] || "Field"}: ${item.msg}`
-                ).join(" | ")
+                ? detail.map(item => {
+
+                    const field =
+                        item.loc?.slice(-1)[0] || "Field";
+
+                    return `${field}: ${item.msg}`;
+
+                }).join(" | ")
 
                 : (
+
                     detail ||
                     `Request failed (${response.status})`
+
                 );
+
 
             throw new Error(message);
 
         }
 
 
-        // Display actual model prediction
+        // Display actual ML prediction
 
         renderResult(data);
 
-        document.getElementById("resultCard").scrollIntoView({
+
+        // Scroll to result
+
+        resultCard.scrollIntoView({
 
             behavior: "smooth",
 
@@ -358,15 +427,19 @@ form.addEventListener("submit", async (event) => {
 
         });
 
+
     }
 
     catch (error) {
+
+        console.error("Prediction error:", error);
+
 
         showError(
 
             error.message.includes("Failed to fetch")
 
-                ? "Could not reach FastAPI. Make sure the backend is running at http://127.0.0.1:8000 and CORS is enabled."
+                ? "Could not reach FastAPI. Make sure your backend is running at http://127.0.0.1:8000."
 
                 : error.message
 
@@ -375,6 +448,7 @@ form.addEventListener("submit", async (event) => {
         checkApi();
 
     }
+
 
     finally {
 
@@ -390,19 +464,44 @@ form.addEventListener("submit", async (event) => {
 });
 
 
-// Reset form
+// ============================================================
+// RESET FORM
+// ============================================================
 
 document.getElementById("resetBtn").addEventListener("click", () => {
 
+
+    // Hide prediction
+
     document.getElementById("resultContent").classList.add("hidden");
 
-    document.getElementById("emptyState").classList.remove("hidden");
+
+    // Restore initial hint
+
+    document.getElementById("skylineHint").classList.remove("hidden");
+
+
+    // Remove active building
+
+    resultCard.classList.remove("has-result");
+
+    document.querySelectorAll(".building").forEach(building => {
+
+        building.classList.remove("active");
+
+    });
+
+
+    // Reset form
 
     form.reset();
 
     availability.dispatchEvent(new Event("input"));
 
     clearError();
+
+
+    // Scroll to top
 
     window.scrollTo({
 
