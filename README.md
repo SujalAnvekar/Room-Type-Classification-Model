@@ -1,4 +1,4 @@
-**NYC Airbnb Room Type Classification**
+## NYC Airbnb Room Type Classification
 
 A Machine Learning web application that predicts the room type of Airbnb listings in New York City based on property characteristics, pricing, location, reviews, and availability.
 
